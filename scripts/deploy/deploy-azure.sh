@@ -228,6 +228,7 @@ JSON_CONFIG=$(
     "completionModel": { "value": "$AI_COMPLETION_MODEL" },
     "deployWebApiPackage": { "value": $([ "$NO_DEPLOY_PACKAGE" = true ] && echo "false" || echo "true") },
     "deployMemoryPipelinePackage": { "value": $([ "$NO_DEPLOY_PACKAGE" = true ] && echo "false" || echo "true") },
+    "deployWebSearcherPackage": { "value": $([ "$NO_DEPLOY_PACKAGE" = true ] && echo "false" || echo "true") },
     "aiEndpoint": { "value": "$([ ! -z "$AI_ENDPOINT" ] && echo "$AI_ENDPOINT")" },
     "azureAdInstance": { "value": "$AZURE_AD_INSTANCE" },
     "azureAdTenantId": { "value": "$AZURE_AD_TENANT_ID" },
