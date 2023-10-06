@@ -5,7 +5,7 @@
 set -e
 
 usage() {
-    echo "Usage: $0 -d DEPLOYMENT_NAME -s SUBSCRIPTION -c BACKEND_CLIENT_ID -t AZURE_AD_TENANT_ID -ai AI_SERVICE_TYPE [OPTIONS]"
+    echo "Usage: $0 -d DEPLOYMENT_NAME -s SUBSCRIPTION -c BACKEND_CLIENT_ID -fc FRONTEND_CLIENT_ID -t AZURE_AD_TENANT_ID -ai AI_SERVICE_TYPE [OPTIONS]"
     echo ""
     echo "Arguments:"
     echo "  -d, --deployment-name DEPLOYMENT_NAME                   Name for the deployment (mandatory)"
@@ -31,6 +31,26 @@ usage() {
     echo "  -ns, --no-speech-services                               Don't deploy Speech Services to enable speech as chat input"
     echo "  -dd, --debug-deployment                                 Switches on verbose template deployment output"
     echo "  -ndp, --no-deploy-package                               Skips deploying the Web API package when set."
+    echo "  -d, --deployment-name DEPLOYMENT_NAME      Name for the deployment (mandatory)"
+    echo "  -s, --subscription SUBSCRIPTION            Subscription to which to make the deployment (mandatory)"
+    echo "  -c, --client-id BACKEND_CLIENT_ID          Azure AD client ID for the Web API backend app registration (mandatory)"
+    echo "  -fc, --frontend-client-id FE_CLIENT_ID     Azure AD client ID for the frontend app registration (mandatory)"
+    echo "  -t, --tenant-id AZURE_AD_TENANT_ID         Azure AD tenant ID for authenticating users (mandatory)"
+    echo "  -ai, --ai-service AI_SERVICE_TYPE          Type of AI service to use (i.e., OpenAI or AzureOpenAI) (mandatory)"
+    echo "  -aiend, --ai-endpoint AI_ENDPOINT          Endpoint for existing Azure OpenAI resource"
+    echo "  -aikey, --ai-service-key AI_SERVICE_KEY    API key for existing Azure OpenAI resource or OpenAI account"
+    echo "  -rg, --resource-group RESOURCE_GROUP       Resource group to which to make the deployment (default: \"rg-\$DEPLOYMENT_NAME\")"
+    echo "  -r, --region REGION                        Region to which to make the deployment (default: \"South Central US\")"
+    echo "  -a, --app-service-sku WEB_APP_SVC_SKU      SKU for the Azure App Service plan (default: \"B1\")"
+    echo "  -i, --instance AZURE_AD_INSTANCE           Azure AD cloud instance for authenticating users"
+    echo "                                             (default: \"https://login.microsoftonline.com\")"
+    echo "  -ms, --memory-store                        Method to use to persist embeddings. Valid values are"
+    echo "                                             \"AzureCognitiveSearch\" (default), \"Qdrant\", \"Postgres\" and \"Volatile\""
+    echo "  -sap, --sql-admin-password                 Password for the PostgreSQL Server admin user"
+    echo "  -nc, --no-cosmos-db                        Don't deploy Cosmos DB for chat storage - Use volatile memory instead"
+    echo "  -ns, --no-speech-services                  Don't deploy Speech Services to enable speech as chat input"
+    echo "  -dd, --debug-deployment                    Switches on verbose template deployment output"
+    echo "  -ndp, --no-deploy-package                  Skips deploying the Web API package when set."
 }
 
 # Parse arguments
@@ -49,6 +69,11 @@ while [[ $# -gt 0 ]]; do
         ;;
     -c | --client-id)
         BACKEND_CLIENT_ID="$2"
+        shift
+        shift
+        ;;
+    -fc | --frontend-client-id)
+        FRONTEND_CLIENT_ID="$2"
         shift
         shift
         ;;
@@ -97,11 +122,6 @@ while [[ $# -gt 0 ]]; do
         shift
         shift
         ;;
-    -wr | --web-app-region)
-        WEB_APP_REGION="$2"
-        shift
-        shift
-        ;;
     -a | --app-service-sku)
         WEB_APP_SVC_SKU="$2"
         shift
@@ -146,7 +166,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Check mandatory arguments
-if [[ -z "$DEPLOYMENT_NAME" ]] || [[ -z "$SUBSCRIPTION" ]] || [[ -z "$BACKEND_CLIENT_ID" ]] || [[ -z "$AZURE_AD_TENANT_ID" ]] || [[ -z "$AI_SERVICE_TYPE" ]]; then
+if [[ -z "$DEPLOYMENT_NAME" ]] || [[ -z "$SUBSCRIPTION" ]] || [[ -z "$BACKEND_CLIENT_ID" ]] || [[ -z "$FRONTEND_CLIENT_ID" ]] || [[ -z "$AZURE_AD_TENANT_ID" ]] || [[ -z "$AI_SERVICE_TYPE" ]]; then
     usage
     exit 1
 fi
@@ -209,7 +229,6 @@ az account set -s "$SUBSCRIPTION"
 # Set defaults
 : "${REGION:="southcentralus"}"
 : "${WEB_APP_SVC_SKU:="B1"}"
-: "${WEB_APP_REGION:="westus2"}"
 : "${AZURE_AD_INSTANCE:="https://login.microsoftonline.com"}"
 : "${MEMORY_STORE:="AzureCognitiveSearch"}"
 : "${NO_COSMOS_DB:=false}"
@@ -220,7 +239,6 @@ JSON_CONFIG=$(
     cat <<EOF
 {
     "webAppServiceSku": { "value": "$WEB_APP_SVC_SKU" },
-    "webappLocation": { "value": "$WEB_APP_REGION" },
     "aiService": { "value": "$AI_SERVICE_TYPE" },
     "aiApiKey": { "value": "$AI_SERVICE_KEY" },
     "plannerModel": { "value": "$AI_PLANNER_MODEL" },
@@ -233,6 +251,7 @@ JSON_CONFIG=$(
     "azureAdInstance": { "value": "$AZURE_AD_INSTANCE" },
     "azureAdTenantId": { "value": "$AZURE_AD_TENANT_ID" },
     "webApiClientId": { "value": "$BACKEND_CLIENT_ID" },
+    "frontendClientId": { "value": "$FRONTEND_CLIENT_ID" },
     "deployNewAzureOpenAI": { "value": $([ "$NO_NEW_AZURE_OPENAI" = true ] && echo "false" || echo "true") },
     "memoryStore": { "value": "$MEMORY_STORE" },
     "sqlAdminPassword": { "value": "$SQL_ADMIN_PASSWORD" },
@@ -242,7 +261,7 @@ JSON_CONFIG=$(
 EOF
 )
 
-echo "Ensuring resource group $RESOURCE_GROUP..."
+echo "Ensuring resource group $RESOURCE_GROUP exists..."
 az group create --location "$REGION" --name "$RESOURCE_GROUP" --tags Creator="$USER"
 
 echo "Validating template file..."
